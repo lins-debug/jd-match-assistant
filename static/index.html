@@ -1,0 +1,146 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>简历与 JD 匹配助手</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 30px auto; padding: 0 20px; color: #1a1a1a; }
+  h1 { font-size: 22px; margin-bottom: 20px; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .panel label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #555; }
+  .panel textarea { width: 100%; height: 200px; padding: 10px; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 13px; font-family: system-ui, sans-serif; resize: vertical; }
+  .jd-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+  .jd-tab { padding: 6px 14px; border: 1px solid #d0d0d0; border-radius: 4px 4px 0 0; cursor: pointer; font-size: 13px; background: #f5f5f5; }
+  .jd-tab.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  button.main { width: 100%; padding: 12px; background: #1a1a1a; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; }
+  button.main:hover { background: #333; }
+  .report { margin-top: 20px; }
+  .prescore { display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+  .risk-low { background: #e8f5e9; color: #2e7d32; }
+  .risk-medium { background: #fff3e0; color: #e65100; }
+  .risk-high { background: #fff0f0; color: #c62828; }
+  .section { margin-bottom: 16px; }
+  .section h3 { font-size: 15px; margin-bottom: 8px; color: #555; }
+  .tag { display: inline-block; padding: 3px 10px; background: #e8f0fe; color: #1a56db; border-radius: 12px; font-size: 13px; margin: 2px; }
+  .tag.miss { background: #fff0f0; color: #c62828; }
+  .skill-item { padding: 8px 12px; border: 1px solid #e5e5e5; border-radius: 6px; margin-bottom: 6px; }
+  .skill-item .name { font-weight: 600; font-size: 14px; }
+  .skill-item .tip { font-size: 13px; color: #666; margin-top: 2px; }
+  .loading { color: #999; font-size: 14px; }
+  .compare-button { margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<h1>简历与 JD 匹配助手</h1>
+
+<div class="panels">
+  <div class="panel">
+    <label>你的简历</label>
+    <textarea id="resume" placeholder="粘贴你的简历文本...">Python 开发 2 年经验。熟悉 FastAPI、PostgreSQL、Docker、Redis。独立完成 RESTful API 后端开发。了解 Git、Linux 基本操作。做过一个内部数据看板项目，用 FastAPI + ECharts 实现。</textarea>
+  </div>
+  <div class="panel">
+    <label>岗位 JD</label>
+    <div class="jd-tabs" id="jdTabs"></div>
+    <textarea id="jd" placeholder="粘贴 JD 文本...">招聘 AI 应用工程师。要求：Python 熟练、有 FastAPI 开发经验、熟悉向量数据库（Chroma/Milvus）、有 LLM API 调用经验（OpenAI/DeepSeek）。加分项：Docker 部署、Kubernetes、RAG 实战经验。</textarea>
+  </div>
+</div>
+
+<button class="main" id="matchBtn">分析匹配度</button>
+<div id="result" class="report"></div>
+
+<script>
+// 预设 JD 库
+const jds = {
+  "AI应用": "招聘 AI 应用工程师。要求：Python 熟练、有 FastAPI 开发经验、熟悉向量数据库（Chroma/Milvus）、有 LLM API 调用经验（OpenAI/DeepSeek）。加分项：Docker 部署、Kubernetes、RAG 实战经验。",
+  "Python后端": "招聘 Python 后端工程师。要求：3 年 Python 经验、熟悉 Django/Flask/FastAPI、PostgreSQL/MySQL、Redis 缓存、RESTful API 设计。加分：Docker、AWS、微服务架构经验。",
+  "AI平台": "招聘 AI 平台开发工程师。要求：Python、SQL、分布式系统经验、了解 ML 模型部署流程、熟悉 CI/CD 和容器化。加分：Kubeflow、MLflow、Airflow 使用经验。"
+};
+const jdEl = document.getElementById("jd");
+const tabsEl = document.getElementById("jdTabs");
+
+// 渲染 JD 标签
+for (const [label, text] of Object.entries(jds)) {
+  const tab = document.createElement("div");
+  tab.className = "jd-tab";
+  tab.textContent = label;
+  tab.onclick = () => {
+    jdEl.value = text;
+    document.querySelectorAll(".jd-tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+  };
+  tabsEl.appendChild(tab);
+}
+
+document.getElementById("matchBtn").addEventListener("click", async () => {
+  const resume = document.getElementById("resume").value.trim();
+  const jd = jdEl.value.trim();
+  if (!resume || !jd) return alert("请填写简历和 JD");
+
+  document.getElementById("result").innerHTML = '<p class="loading">分析中...</p>';
+  const res = await fetch("/match", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resume, jd }),
+  });
+  const data = await res.json();
+  render(data.report);
+});
+
+function render(r) {
+  if (r.error) {
+    document.getElementById("result").innerHTML = '<p style="color:red">错误：' + r.error + "</p>";
+    return;
+  }
+
+  const riskClass = r.risk_level === "low" ? "risk-low" : r.risk_level === "medium" ? "risk-medium" : "risk-high";
+  let html = '<div class="prescore ' + riskClass + '">匹配度：' + (r.match_score || "?") + " 分 · 风险：" + (r.risk_level || "?") + "</div>";
+
+  // 匹配技能
+  html += '<div class="section"><h3>✅ 已匹配技能</h3>';
+  if (r.matched_skills) r.matched_skills.forEach(s => html += '<span class="tag">' + s + "</span> ");
+  html += "</div>";
+
+  // 缺失技能
+  html += '<div class="section"><h3>❌ 缺失技能</h3>';
+  if (r.missing_skills) {
+    r.missing_skills.forEach(m => {
+      html += '<div class="skill-item"><span class="name">' + m.skill + " (" + m.priority + ")</span><div class='tip'>" + (m["补课建议"] || "") + "</div></div>";
+    });
+  }
+  html += "</div>";
+
+  // 项目补强建议
+  html += '<div class="section"><h3>🔧 建议做的项目</h3>';
+  if (r.projects_to_build) {
+    r.projects_to_build.forEach(p => {
+      html += "<div class='skill-item'><span class='name'>" + p["项目名称"] + "</span><div class='tip'>" + p["为什么值得做"] + "</div></div>";
+    });
+  }
+  html += "</div>";
+
+  // 面试风险
+  html += '<div class="section"><h3>⚠️ 面试风险点</h3>';
+  if (r.interview_risks) {
+    r.interview_risks.forEach(ir => {
+      html += "<div class='skill-item'><span class='name'>" + ir["风险点"] + "</span><div class='tip'>" + ir["应对建议"] + "</div></div>";
+    });
+  }
+  html += "</div>";
+
+  // 简历建议
+  const rw = r["简历改写建议"];
+  if (rw) {
+    html += '<div class="section"><h3>📝 简历优化建议</h3>';
+    html += "<div class='skill-item'><span class='name'>当前问题</span><div class='tip'>" + rw["当前问题"] + "</div></div>";
+    html += "<div class='skill-item'><span class='name'>建议突出</span><div class='tip'>" + rw["建议突出"] + "</div></div>";
+    html += "<div class='skill-item'><span class='name'>建议淡化</span><div class='tip'>" + rw["建议淡化"] + "</div></div>";
+    html += "</div>";
+  }
+
+  document.getElementById("result").innerHTML = html;
+}
+</script>
+</body>
+</html>
