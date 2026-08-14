@@ -29,17 +29,25 @@
 ## 快速开始
 
 ```bash
-# 1. 配置环境变量（同项目 1/2 共用 .env）
-cp ../project-1-rag-assistant/.env .env
+# 1. 配置环境变量
+cp .env.example .env
+# 编辑 .env，填入你的 API Key
 
 # 2. 安装依赖
-pip install openai python-dotenv fastapi uvicorn
+pip install -r requirements.txt
 
 # 3. 启动服务
 python -m uvicorn server:app --host 127.0.0.1 --port 8002
 ```
 
 打开 http://127.0.0.1:8002，粘贴简历和 JD 进行分析。
+
+## Docker 部署
+
+```bash
+docker build -t jd-match-assistant .
+docker run -p 8002:8002 jd-match-assistant
+```
 
 ## 评测指标
 
